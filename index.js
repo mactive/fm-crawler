@@ -25,21 +25,24 @@ const c = new Crawler({
       });
       console.log('fetch all courses...done');
       console.log('request video data...');
-      const promises = courses.map(function (item) {
-        return new Promise(function (resolve, reject) {
-          request(item, function (error, response, body) {
-            if (error) {
-              reject(error)
-            }
-            resolve(body);
+      const promises = courses.reverse().map(function (item, index) {
+        if(index > 17){
+          console.log(item, "need download");
+          return new Promise(function (resolve, reject) {
+            request(item, function (error, response, body) {
+              if (error) {
+                reject(error)
+              }
+              resolve(body);
+            });
           });
-        });
+        }else{
+          console.log(item, "has downloaded");
+        }
       });
       Promise.all(promises).then(function (videos) {
         console.log('request video data...done');
-
         fs.ensureDirSync('./download');
-        fs.emptyDirSync('./download');
         console.log('start downloading...');
 
         forEach(videos, function (item) {
@@ -50,20 +53,43 @@ const c = new Crawler({
           fs.writeJsonSync(videoPath + '/video.json', video);
           forEach(video.lessonData, function (lesson) {
             const done = this.async();
-            const filepath = videoPath + '/' + lesson.index + '.' + lesson.title + '.mp4';
-            console.log('downloading ' + lesson.index + '.' + lesson.title + '.mp4');
+            const filepath = videoPath + '/' + lesson.index + '.' + lesson.slug + '.mp4';
+            const transcriptPath = videoPath + '/' + lesson.index + '.' + lesson.slug + '.vtt';
+            console.dir(lesson.statsId);
+            console.log('downloading ' + lesson.index + '.' + lesson.slug + '.mp4');
+            if (fs.existsSync(filepath)){
+              done();
+              return;
+            }
+            fs.ensureFileSync(filepath);
+
+            // 下载字幕文件
+            progress(request({
+              url: 'https://api.frontendmasters.com/v1/kabuki/transcripts/'+lesson.statsId+'.vtt'
+            }))
+              .on('error', function () {
+                fs.removeSync(transcriptPath);
+              })
+              .pipe(fs.createWriteStream(transcriptPath));
+            
+            // 下载文件
             progress(request({
               url: 'https://api.frontendmasters.com/v1/kabuki/video/' + lesson.statsId + '?r=1080&f=mp4',
             }))
               .on('progress', function (state) {
-                process.stdout.write("process：" + (state.percent * 100).toFixed(2) + '%   speed：' + (state.speed / 1024).toFixed(2) + 'kb/s  \r');
+                process.stdout.write("process：" + (state.percent*100).toFixed(2) + '%   speed：' + (state.speed / 1024).toFixed(2) + 'kb/s  \r');
+              })
+              .on('error', function (err) {
+                fs.removeSync(filepath);
               })
               .on('end', function () {
+                // 一个lesson现在完成
                 done();
               })
               .pipe(fs.createWriteStream(filepath));
           }, function (notAborted, arr) {
-            console.log("done", notAborted, arr);
+            console.log('== video downloaded ==');
+            // 整个视频下载完成
             videosDone();
           });
         })
