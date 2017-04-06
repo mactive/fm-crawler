@@ -25,26 +25,25 @@ const c = new Crawler({
       });
       console.log('fetch all courses...done');
       console.log('request video data...');
-      const promises = courses.reverse().map(function (item, index) {
-        if(index > 17){
-          console.log(item, "need download");
-          return new Promise(function (resolve, reject) {
-            request(item, function (error, response, body) {
-              if (error) {
-                reject(error)
-              }
-              resolve(body);
-            });
+      //倒序删掉前18个
+      courses.reverse().splice(0,18);
+      const promises = courses.map(function (item, index) {
+        console.log(item, index);
+        return new Promise(function (resolve, reject) {
+          request(item, function (error, response, body) {
+            if (error) {
+              reject(error)
+            }
+            resolve(body);
           });
-        }else{
-          console.log(item, "has downloaded");
-        }
+        });
+
       });
       Promise.all(promises).then(function (videos) {
         console.log('request video data...done');
         fs.ensureDirSync('./download');
         console.log('start downloading...');
-
+        console.log(videos.length, videos[0]);
         forEach(videos, function (item) {
           const videosDone = this.async();
           const video = JSON.parse(item);
@@ -74,7 +73,7 @@ const c = new Crawler({
             
             // 下载文件
             progress(request({
-              url: 'https://api.frontendmasters.com/v1/kabuki/video/' + lesson.statsId + '?r=1080&f=mp4',
+              url: 'https://api.frontendmasters.com/v1/kabuki/video/' + lesson.statsId + '?r=720&f=mp4',
             }))
               .on('progress', function (state) {
                 process.stdout.write("process：" + (state.percent*100).toFixed(2) + '%   speed：' + (state.speed / 1024).toFixed(2) + 'kb/s  \r');
